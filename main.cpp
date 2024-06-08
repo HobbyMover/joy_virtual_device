@@ -7,10 +7,13 @@
 #include <string.h>
 #include <sys/time.h>
 #include <poll.h>
+#include <iostream>
+#include <linux/joystick.h>
+
 
 #define PORT 60123
 #define SIZE 1024
-#define MAX_CLIENTS 10
+#define MAX_CLIENTS 2
 
 int creat_socket()
 {
@@ -26,12 +29,14 @@ int creat_socket()
     {
         perror("bindResult");
     }
+    std::cout << "bindResult: " << bindResult << std::endl;
 
     int listenResult = listen(server_socket, 5);
     if (listenResult == -1)
     {
         perror("listenResult");
     }
+    std::cout << "listenResult: " << listenResult << std::endl;
     printf("server start\n");
     return server_socket;
 }
@@ -39,9 +44,11 @@ int creat_socket()
 int wait_client(int server_socket)
 {
     struct pollfd pollfds[MAX_CLIENTS + 1];
+    memset(pollfds, 0, sizeof(pollfd) * (MAX_CLIENTS + 1));
     pollfds[0].fd = server_socket;
     pollfds[0].events = POLLIN | POLLPRI;
     int useClient = 0;
+    int client_socket;
 
     while (1)
     {
@@ -53,12 +60,13 @@ int wait_client(int server_socket)
             {
                 struct sockaddr_in cliaddr;
                 socklen_t addrlen = sizeof(cliaddr);
-                int client_socket = accept(server_socket, (struct sockaddr *)&cliaddr, &addrlen);
-                printf("accept success %s\n", inet_ntoa(cliaddr.sin_addr));
-                for (int i = 1; i < MAX_CLIENTS; i++)
+                client_socket = accept(server_socket, (struct sockaddr *)&cliaddr, &addrlen);
+                printf("accept success %s, client_socket: %i\n", inet_ntoa(cliaddr.sin_addr), client_socket);
+                for (int i = 1; i < MAX_CLIENTS + 1; i++)
                 {
                     if (pollfds[i].fd == 0)
                     {
+                        std::cout << "written to i fd: " << i << std::endl;
 
                         pollfds[i].fd = client_socket;
                         pollfds[i].events = POLLIN | POLLPRI;
@@ -67,12 +75,13 @@ int wait_client(int server_socket)
                     }
                 }
             }
-            for (int i = 1; i < MAX_CLIENTS; i++)
+            for (int i = 1; i < MAX_CLIENTS + 1; i++)
             {
+                JS_DATA_TYPE data;
                 if (pollfds[i].fd > 0 && pollfds[i].revents & POLLIN)
                 {
                     char buf[SIZE];
-                    int bufSize = read(pollfds[i].fd, buf, SIZE - 1);
+                    int bufSize = read(pollfds[i].fd, &data, sizeof(data));
                     if (bufSize == -1)
                     {
                         pollfds[i].fd = 0;
@@ -90,8 +99,11 @@ int wait_client(int server_socket)
                     else
                     {
 
-                        buf[bufSize] = '\0';
-                        printf("From client: %s\n", buf);
+                        std::cout << "buttons: " << data.buttons
+                                  << " x: " << data.x
+                                  << " y: " << data.y << std::endl;
+                        //buf[bufSize] = '\0';
+                        //printf("From client: %s\n", buf[0]);
                     }
                 }
             }
